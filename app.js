@@ -8,7 +8,7 @@ const firebaseConfig = {
     projectId: "friendquiz-94ba3",
     storageBucket: "friendquiz-94ba3.appspot.com",
     messagingSenderId: "422728369836",
-    appId: "1:422728369836:web:071dd0eb7363de2f64100f"
+    appId: "1:422728369836:web:071dd9ab77f2dc26cf4109"
 };
 
 if (!firebase.apps.length) {
