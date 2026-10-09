@@ -1,21 +1,68 @@
+// ==========================================
+// 1. FIREBASE CONFIG & INITIALIZATION
+// ==========================================
+const firebaseConfig = {
+    apiKey: "AIzaSyBScSSGdMZCR41E2vsS4ogvlBH4vV3nTmw",
+    authDomain: "friendquiz-94ba3.firebaseapp.com",
+    databaseURL: "https://friendquiz-94ba3-default-rtdb.firebaseio.com",
+    projectId: "friendquiz-94ba3",
+    storageBucket: "friendquiz-94ba3.appspot.com",
+    messagingSenderId: "422728369836",
+    appId: "1:422728369836:web:071dd0eb7363de2f64100f"
+};
+
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+const db = firebase.database();
+
+// الاستماع اللحظي للدرجات من Firebase
+function listenToScoresFirebase(quizKey, callback) {
+    if (!quizKey) return;
+    const sanitizedKey = quizKey.replace(/[^a-zA-Z0-9_-]/g, '_');
+    db.ref(`quizzes/${sanitizedKey}/scores`).on('value', (snapshot) => {
+        const data = snapshot.val();
+        let board = [];
+        if (data) {
+            board = Object.values(data);
+        }
+        callback(board);
+    });
+}
+
+// حفظ النتيجة في Firebase
+function saveScoreToFirebase(quizKey, friendName, score, total) {
+    if (!quizKey || !friendName) return;
+    const sanitizedKey = quizKey.replace(/[^a-zA-Z0-9_-]/g, '_');
+    db.ref(`quizzes/${sanitizedKey}/scores`).push({
+        f: friendName,
+        s: score,
+        t: total,
+        timestamp: Date.now()
+    });
+}
+
+// ==========================================
+// 2. YOUR ORIGINAL APP CODE
+// ==========================================
 const app = document.getElementById('app');
 const STORAGE_PREFIX = "friendQuizV2_";
 
 // --- CUSTOM ALERT ---
-window.customAlert = function(msg, type = 'error') {
+window.customAlert = function (msg, type = 'error') {
     let container = document.getElementById('toast-container');
     if (!container) {
         container = document.createElement('div');
         container.id = 'toast-container';
         document.body.appendChild(container);
     }
-    
+
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.innerHTML = msg;
-    
+
     container.appendChild(toast);
-    
+
     setTimeout(() => {
         toast.classList.add('fade-out');
         setTimeout(() => toast.remove(), 300);
@@ -37,7 +84,7 @@ const PREDEFINED_QUESTIONS = [
     { id: 11, me: "أكثر شيء أحب قضاء وقتي فيه؟", friend: "أكثر شيء يحب {name} قضاء وقته فيه؟", o: ["😴 النوم", "📱 تصفح الجوال", "🎬 مشاهدة الأفلام/المسلسلات", "👯 الخروج مع الأصدقاء", "🎮 اللعب (Video Games)", "📚 القراءة"] },
     { id: 12, me: "كيف أتصرف عندما أحزن؟", friend: "كيف يتصرف {name} عندما يحزن؟", o: ["🛌 أنام", "🍔 آكل كثيراً", "🚶 أجلس بمفردي", "🫂 أفضفض لشخص قريب", "🎧 أستمع للموسيقى", "😭 أبكي"] },
     { id: 13, me: "حيواني الأليف المفضل؟", friend: "الحيوان الأليف المفضل لـ {name}؟", o: ["🐱 القطط", "🐶 الكلاب", "🦜 الطيور", "🐠 الأسماك", "🚫 لا أحب الحيوانات الأليفة"] },
-    { id: 14, me: "لو قدرت أسافر لأي دولة الآن، سأختار؟", friend: "لو استطاع {name} السفر لأي دولة الآن، سيختار؟", o: ["🏝️ المالديف", "🇹🇷 تركيا", "🇺🇸 أمريكا", "🇯🇵 اليابان", "🇫🇷 فرنسا", "🇬🇧 بريطانيا"] },
+    { id: 14, me: "لو قدرت أسافر لأي دولة الآن، سأختار؟", friend: "لو استطاع {name} السفر لأي دولة الآن، سيختار؟", o: ["🏝️ المالديف", "🇹🇷 تركيا", "🇺🇸 أمريكا", "🇯پان اليابان", "🇫🇷 فرنسا", "🇬🇧 بريطانيا"] },
     { id: 15, me: "كلمتي المفضلة التي أقولها دائماً؟", friend: "الكلمة التي يرددها {name} دائماً؟", o: ["💯 والله", "😲 بجد", "🤦 يا عم", "👌 تمام", "🚗 يا اسطى", "👍 أوكي"] },
     { id: 16, me: "لو كنت بطل خارق، ماذا ستكون قوتي؟", friend: "لو كان {name} بطلاً خارقاً، ما هي قوته؟", o: ["✈️ الطيران", "👻 الاختفاء", "💪 القوة الخارقة", "🧠 قراءة الأفكار", "⚡ السرعة الخارقة"] },
     { id: 17, me: "أفضل هدية ممكن حد يجيبهالي؟", friend: "أفضل هدية بالنسبة لـ {name}؟", o: ["📱 إلكترونيات", "👟 ملابس/أحذية", "⌚ ساعة قيمة", "🍫 شوكولاتة", "💵 كاش", "🌹 ورد"] },
@@ -54,7 +101,7 @@ function decodeData(str) {
 
 // Router
 let currentQueryStr = "";
-let quizKey = ""; // Used for local storage anti-cheat
+let quizKey = ""; // Used for local storage & Firebase anti-cheat
 
 function initApp() {
     const params = new URLSearchParams(window.location.search);
@@ -86,27 +133,11 @@ function initApp() {
 // --- HOME SCREEN ---
 function renderHome() {
     const savedQuiz = localStorage.getItem('friendQuiz_myLink');
-    const board = JSON.parse(localStorage.getItem('friendQuiz_leaderboard') || '[]');
 
     let myQuizSection = '';
     if (savedQuiz) {
         const parsed = JSON.parse(savedQuiz);
-        board.sort((a, b) => (b.s/b.t) - (a.s/a.t));
-
-        let scoresHtml = '';
-        if (board.length === 0) {
-            scoresHtml = `
-                <div style="text-align:center; padding: 15px 0;">
-                    <img src="https://media.tenor.com/pZ_sJd2gqPIAAAAi/sad-spongebob.gif" style="width:120px; border-radius:12px; display:block; margin: 0 auto 10px;" alt="sad">
-                    <p style="font-size:0.95rem; color:var(--text-muted);">لم يحل أي صديق اختبارك بعد 🥺<br>أرسل الرابط وانتظر!</p>
-                </div>`;
-        } else {
-            scoresHtml = board.map((item, i) => `
-                <div style="background:rgba(255,255,255,0.05); padding:12px 15px; border-radius:10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; border-right:3px solid ${i===0?'#fbbf24':'var(--primary)'}">
-                    <span style="font-weight:bold;">${i===0?'👑 ':''}${i+1}. ${item.f}</span>
-                    <span style="color:var(--secondary); font-weight:bold; font-size:1.1rem;">${item.s}/${item.t}</span>
-                </div>`).join('');
-        }
+        const myQuizKey = parsed.link.includes('?q=') ? parsed.link.split('?q=')[1] : '';
 
         myQuizSection = `
             <div style="background:rgba(255,255,255,0.07); border:1px solid var(--card-border); border-radius:18px; padding:20px; margin-bottom:25px; text-align:right;">
@@ -120,9 +151,35 @@ function renderHome() {
                 
                 <div style="margin-top:18px; border-top:1px solid var(--card-border); padding-top:15px;">
                     <h4 style="color:var(--secondary); margin-bottom:12px;">🏆 درجات أصدقائك</h4>
-                    ${scoresHtml}
+                    <div id="liveScoresContainer">
+                        <p style="font-size:0.85rem; color:var(--text-muted); text-align:center;">جاري تحميل الدرجات...</p>
+                    </div>
                 </div>
             </div>`;
+
+        setTimeout(() => {
+            if (myQuizKey) {
+                listenToScoresFirebase(myQuizKey, (board) => {
+                    const container = document.getElementById('liveScoresContainer');
+                    if (!container) return;
+
+                    if (board.length === 0) {
+                        container.innerHTML = `
+                            <div style="text-align:center; padding: 15px 0;">
+                                <img src="https://media.tenor.com/pZ_sJd2gqPIAAAAi/sad-spongebob.gif" style="width:120px; border-radius:12px; display:block; margin: 0 auto 10px;" alt="sad">
+                                <p style="font-size:0.95rem; color:var(--text-muted);">لم يحل أي صديق اختبارك بعد 🥺<br>أرسل الرابط وانتظر!</p>
+                            </div>`;
+                    } else {
+                        board.sort((a, b) => (b.s / b.t) - (a.s / a.t));
+                        container.innerHTML = board.map((item, i) => `
+                            <div style="background:rgba(255,255,255,0.05); padding:12px 15px; border-radius:10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; border-right:3px solid ${i === 0 ? '#fbbf24' : 'var(--primary)'}">
+                                <span style="font-weight:bold;">${i === 0 ? '👑 ' : ''}${i + 1}. ${item.f}</span>
+                                <span style="color:var(--secondary); font-weight:bold; font-size:1.1rem;">${item.s}/${item.t}</span>
+                            </div>`).join('');
+                    }
+                });
+            }
+        }, 100);
     }
 
     app.innerHTML = `
@@ -138,7 +195,7 @@ function renderHome() {
     `;
 }
 
-window.clearMyQuiz = function() {
+window.clearMyQuiz = function () {
     localStorage.removeItem('friendQuiz_myLink');
     localStorage.removeItem('friendQuiz_leaderboard');
     customAlert('تم حذف الاختبار والدرجات بنجاح!', 'success');
@@ -146,42 +203,53 @@ window.clearMyQuiz = function() {
 }
 
 // --- DASHBOARD ---
-window.renderDashboard = function() {
-    let board = JSON.parse(localStorage.getItem('friendQuiz_leaderboard') || '[]');
-    let contentHtml = "";
-
-    if(board.length === 0) {
-        contentHtml = `
-            <img src="https://media.tenor.com/pZ_sJd2gqPIAAAAi/sad-spongebob.gif" class="result-gif" alt="Sad GIF" style="border: 2px solid var(--card-border);">
-            <p class="subtitle" style="color: white; font-weight: bold; font-size: 1.2rem; margin-top: 15px;">لم يقم أي من أصدقائك بحل الاختبار حتى الآن 🥺</p>
-            <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">أنشئ اختباراً وشارك الرابط معهم لتظهر درجاتهم هنا!</p>
-        `;
-    } else {
-        // Sort by highest percentage
-        board.sort((a, b) => (b.s/b.t) - (a.s/a.t));
-        
-        let listHtml = board.map((item, i) => `
-            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-right: 4px solid ${i===0?'#fbbf24':'var(--primary)'};">
-                <span style="font-size:1.1rem; font-weight:bold;">${i===0?'👑 ':''}${i+1}. ${item.f}</span>
-                <span style="font-weight:bold; color:var(--secondary); font-size:1.2rem;">${item.s} / ${item.t}</span>
-            </div>
-        `).join('');
-
-        contentHtml = `
-            <p class="subtitle">هذه هي درجات أصدقائك الذين أرسلوا لك روابط نتيجتهم:</p>
-            <div style="max-height: 350px; overflow-y: auto; margin-bottom: 20px; text-align: right; padding-right: 5px;">
-                ${listHtml}
-            </div>
-        `;
+window.renderDashboard = function () {
+    const savedQuiz = localStorage.getItem('friendQuiz_myLink');
+    let myQuizKey = "";
+    if (savedQuiz) {
+        const parsed = JSON.parse(savedQuiz);
+        myQuizKey = parsed.link.includes('?q=') ? parsed.link.split('?q=')[1] : '';
     }
 
     app.innerHTML = `
         <div class="fade-in">
             <h2 style="color: var(--secondary); margin-bottom: 20px;">🏆 لوحة درجات الأصدقاء</h2>
-            ${contentHtml}
+            <div id="dashScoresContainer">
+                <p style="text-align:center; color:white;">جاري جلب الدرجات...</p>
+            </div>
             <button class="btn btn-secondary" onclick="renderHome()">🏠 العودة للرئيسية</button>
         </div>
     `;
+
+    if (myQuizKey) {
+        listenToScoresFirebase(myQuizKey, (board) => {
+            const container = document.getElementById('dashScoresContainer');
+            if (!container) return;
+
+            if (board.length === 0) {
+                container.innerHTML = `
+                    <img src="https://media.tenor.com/pZ_sJd2gqPIAAAAi/sad-spongebob.gif" class="result-gif" alt="Sad GIF" style="border: 2px solid var(--card-border);">
+                    <p class="subtitle" style="color: white; font-weight: bold; font-size: 1.2rem; margin-top: 15px;">لم يقم أي من أصدقائك بحل الاختبار حتى الآن 🥺</p>
+                    <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">أنشئ اختباراً وشارك الرابط معهم لتظهر درجاتهم هنا!</p>
+                `;
+            } else {
+                board.sort((a, b) => (b.s / b.t) - (a.s / a.t));
+                let listHtml = board.map((item, i) => `
+                    <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-right: 4px solid ${i === 0 ? '#fbbf24' : 'var(--primary)'};">
+                        <span style="font-size:1.1rem; font-weight:bold;">${i === 0 ? '👑 ' : ''}${i + 1}. ${item.f}</span>
+                        <span style="font-weight:bold; color:var(--secondary); font-size:1.2rem;">${item.s} / ${item.t}</span>
+                    </div>
+                `).join('');
+
+                container.innerHTML = `
+                    <p class="subtitle">هذه هي درجات أصدقائك الذين حلوا اختبارك:</p>
+                    <div style="max-height: 350px; overflow-y: auto; margin-bottom: 20px; text-align: right; padding-right: 5px;">
+                        ${listHtml}
+                    </div>
+                `;
+            }
+        });
+    }
 }
 
 // --- CREATE PREDEFINED QUIZ ---
@@ -191,7 +259,7 @@ let availableQuestions = [];
 function renderCreatePredefinedQuiz() {
     availableQuestions = [...PREDEFINED_QUESTIONS].sort(() => Math.random() - 0.5);
     activeQuestions = [];
-    for(let i=0; i<10; i++) activeQuestions.push(availableQuestions.shift());
+    for (let i = 0; i < 10; i++) activeQuestions.push(availableQuestions.shift());
 
     renderCreatorQuestions();
 }
@@ -207,7 +275,7 @@ function renderCreatorQuestions() {
                 ${q.o.map((opt, j) => `
                     <div class="option-input-row">
                         <input type="radio" name="cq-${index}" value="${j}" id="cq-${index}-${j}">
-                        <label for="cq-${index}-${j}" style="font-size: 1rem; width: 100%;">${opt}</label>
+                        <label for="cq-${index}-${j}" style="font-size: 1rem; width: 100\%;">${opt}</label>
                     </div>
                 `).join('')}
             </div>
@@ -233,7 +301,7 @@ function renderCreatorQuestions() {
     `;
 }
 
-window.skipQuestion = function(index) {
+window.skipQuestion = function (index) {
     if (availableQuestions.length === 0) return customAlert("لا يوجد المزيد من الأسئلة للتخطي!", "warning");
 
     const randomIndex = Math.floor(Math.random() * availableQuestions.length);
@@ -253,7 +321,7 @@ window.skipQuestion = function(index) {
                 ${newQuestion.o.map((opt, j) => `
                     <div class="option-input-row">
                         <input type="radio" name="cq-${index}" value="${j}" id="cq-${index}-${j}">
-                        <label for="cq-${index}-${j}" style="font-size: 1rem; width: 100%;">${opt}</label>
+                        <label for="cq-${index}-${j}" style="font-size: 1rem; width: 100\%;">${opt}</label>
                     </div>
                 `).join('')}
             </div>
@@ -315,13 +383,13 @@ function generateCustomQuestionHTML(id) {
     `;
 }
 
-window.addCustomQuestion = function() {
+window.addCustomQuestion = function () {
     customQuestionsCounter++;
     document.getElementById('customQuestionsContainer').insertAdjacentHTML('beforeend', generateCustomQuestionHTML(customQuestionsCounter));
 }
 
 // --- GENERATE LINK ---
-window.generateQuizLink = function(type) {
+window.generateQuizLink = function (type) {
     const creatorName = document.getElementById('creatorName').value.trim();
     if (!creatorName) {
         customAlert('يرجى كتابة اسمك أعلى الصفحة!', 'warning');
@@ -336,7 +404,7 @@ window.generateQuizLink = function(type) {
             const selected = document.querySelector(`input[name="cq-${i}"]:checked`);
             if (!selected) {
                 customAlert(`يرجى الإجابة على السؤال رقم ${i + 1} حتى نستطيع تقييم صديقك!`, 'warning');
-                document.getElementById(`q-block-${i}`).scrollIntoView({behavior: "smooth", block: "center"});
+                document.getElementById(`q-block-${i}`).scrollIntoView({ behavior: "smooth", block: "center" });
                 return;
             }
             quizData.qs.push({ i: activeQuestions[i].id, a: parseInt(selected.value) });
@@ -361,7 +429,7 @@ window.generateQuizLink = function(type) {
 
             quizData.qs.push({ q: qText, o: options, a: 0 }); // 0 is always the correct one in creation
         }
-        if(quizData.qs.length === 0) return customAlert('يجب إضافة سؤال واحد على الأقل!', 'warning');
+        if (quizData.qs.length === 0) return customAlert('يجب إضافة سؤال واحد على الأقل!', 'warning');
     }
 
     const encoded = encodeData(quizData);
@@ -370,7 +438,6 @@ window.generateQuizLink = function(type) {
 
     // Save quiz persistently so user finds it when they return
     localStorage.setItem('friendQuiz_myLink', JSON.stringify({ name: creatorName, link: shareLink }));
-    // Clear old leaderboard when a new quiz is created
     localStorage.removeItem('friendQuiz_leaderboard');
 
     app.innerHTML = `
@@ -386,7 +453,7 @@ window.generateQuizLink = function(type) {
     `;
 }
 
-window.copyText = function(elementId) {
+window.copyText = function (elementId) {
     const text = document.getElementById(elementId).innerText;
     navigator.clipboard.writeText(text).then(() => {
         customAlert('تم نسخ الرابط بنجاح! أرسله الآن لأصدقائك.', 'success');
@@ -402,15 +469,13 @@ let friendQuestions = [];
 
 function renderTakeQuiz(quizData) {
     currentQuizData = quizData;
-    // Use the FULL query string as the key to prevent collisions between different quizzes
-    quizKey = STORAGE_PREFIX + currentQueryStr;
+    quizKey = currentQueryStr;
 
     // ANTI-CHEAT: Check if this exact quiz was started before
-    const savedStateStr = localStorage.getItem(quizKey);
+    const savedStateStr = localStorage.getItem(STORAGE_PREFIX + quizKey);
     if (savedStateStr) {
         try {
             const savedState = JSON.parse(savedStateStr);
-            // Verify the saved state belongs to THIS quiz (not a different one)
             if (savedState.quizId === quizKey &&
                 savedState.friendAnswers &&
                 savedState.friendAnswers.length > 0 &&
@@ -420,17 +485,16 @@ function renderTakeQuiz(quizData) {
                 currentQuizData.fName = savedState.fName;
                 friendAnswers = savedState.friendAnswers;
                 friendQuestions = savedState.friendQuestions;
-                
+
                 if (friendAnswers.length >= friendQuestions.length) {
                     return calculateAndShowResult();
                 }
-                
+
                 customAlert('تم منع الغش! 🚫😎 سيتم استئناف الاختبار من حيث توقفت.', 'warning');
                 return renderQuestion(friendAnswers.length);
             }
-        } catch(e) {
-            // Corrupted data - ignore and start fresh
-            localStorage.removeItem(quizKey);
+        } catch (e) {
+            localStorage.removeItem(STORAGE_PREFIX + quizKey);
         }
     }
 
@@ -449,13 +513,13 @@ function renderTakeQuiz(quizData) {
     `;
 }
 
-window.startAnswering = function() {
+window.startAnswering = function () {
     const fName = document.getElementById('friendName').value.trim();
     if (!fName) return customAlert('يرجى إدخال اسمك قبل البدء!', 'warning');
-    
+
     currentQuizData.fName = fName;
     friendAnswers = [];
-    
+
     if (currentQuizData.type === 'predefined') {
         friendQuestions = currentQuizData.qs.map((savedQ) => {
             const q = PREDEFINED_QUESTIONS.find(x => x.id === savedQ.i);
@@ -478,14 +542,12 @@ window.startAnswering = function() {
                 text: opt,
                 isCorrect: idx === q.a
             }));
-            // Shuffle choices completely for custom questions
             choices = choices.sort(() => Math.random() - 0.5);
             return { text: q.q, choices: choices };
         });
     }
 
-    // Save to local storage for Anti-Cheat (include quizId to prevent collision)
-    localStorage.setItem(quizKey, JSON.stringify({
+    localStorage.setItem(STORAGE_PREFIX + quizKey, JSON.stringify({
         quizId: quizKey,
         fName: fName,
         friendQuestions: friendQuestions,
@@ -515,27 +577,25 @@ function renderQuestion(index) {
     `;
 }
 
-window.selectAnswer = function(qIndex, optIndex, isCorrect) {
+window.selectAnswer = function (qIndex, optIndex, isCorrect) {
     if (isCorrect) friendAnswers.push(1);
     else friendAnswers.push(0);
 
-    // ANTI-CHEAT: Update storage immediately
-    const savedStateStr = localStorage.getItem(quizKey);
+    const savedStateStr = localStorage.getItem(STORAGE_PREFIX + quizKey);
     if (savedStateStr) {
         const savedState = JSON.parse(savedStateStr);
         savedState.friendAnswers = friendAnswers;
-        localStorage.setItem(quizKey, JSON.stringify(savedState));
+        localStorage.setItem(STORAGE_PREFIX + quizKey, JSON.stringify(savedState));
     }
 
     const selectedElement = document.getElementById(`opt-${qIndex}-${optIndex}`);
     selectedElement.style.background = isCorrect ? 'var(--success)' : 'var(--danger)';
     selectedElement.style.borderColor = isCorrect ? 'var(--success)' : 'var(--danger)';
-    
-    // Highlight correct answer if they got it wrong (optional, but fun)
-    if(!isCorrect) {
+
+    if (!isCorrect) {
         const correctChoiceIdx = friendQuestions[qIndex].choices.findIndex(c => c.isCorrect);
         const correctEl = document.getElementById(`opt-${qIndex}-${correctChoiceIdx}`);
-        if(correctEl) {
+        if (correctEl) {
             correctEl.style.borderColor = 'var(--success)';
             correctEl.style.color = 'var(--success)';
         }
@@ -552,7 +612,10 @@ function calculateAndShowResult() {
     let score = friendAnswers.reduce((a, b) => a + b, 0);
     const total = friendQuestions.length;
     const percentage = score / total;
-    
+
+    // حفظ الدرجة في Firebase ليصل تنبيه فوري لصاحب الاختبار
+    saveScoreToFirebase(quizKey, currentQuizData.fName, score, total);
+
     const resultData = {
         f: currentQuizData.fName,
         c: currentQuizData.n,
@@ -603,22 +666,10 @@ function calculateAndShowResult() {
             </div>
         </div>
     `;
-    
-    // Clear storage after finishing so they can re-take if they want later?
-    // Actually, no! If we clear it, they can re-take it to get a better score. 
-    // Leaving it prevents retaking entirely!
 }
 
 // --- VIEW RESULT FLOW ---
 function renderViewResult(data) {
-    // Save to dashboard
-    let board = JSON.parse(localStorage.getItem('friendQuiz_leaderboard') || '[]');
-    // prevent exact duplicates (same name and score)
-    if (!board.find(x => x.f === data.f && x.s === data.s && x.t === data.t)) {
-        board.push(data);
-        localStorage.setItem('friendQuiz_leaderboard', JSON.stringify(board));
-    }
-
     const percentage = data.s / data.t;
     let message = "";
     let gifUrl = "";
