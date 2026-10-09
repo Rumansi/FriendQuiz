@@ -402,23 +402,35 @@ let friendQuestions = [];
 
 function renderTakeQuiz(quizData) {
     currentQuizData = quizData;
-    quizKey = STORAGE_PREFIX + currentQueryStr.substring(0, 30); // Hash for local storage
+    // Use the FULL query string as the key to prevent collisions between different quizzes
+    quizKey = STORAGE_PREFIX + currentQueryStr;
 
-    // ANTI-CHEAT: Check if started before
+    // ANTI-CHEAT: Check if this exact quiz was started before
     const savedStateStr = localStorage.getItem(quizKey);
     if (savedStateStr) {
-        const savedState = JSON.parse(savedStateStr);
-        if (savedState.friendAnswers && savedState.friendAnswers.length > 0) {
-            currentQuizData.fName = savedState.fName;
-            friendAnswers = savedState.friendAnswers;
-            friendQuestions = savedState.friendQuestions;
-            
-            if (friendAnswers.length >= friendQuestions.length) {
-                return calculateAndShowResult();
+        try {
+            const savedState = JSON.parse(savedStateStr);
+            // Verify the saved state belongs to THIS quiz (not a different one)
+            if (savedState.quizId === quizKey &&
+                savedState.friendAnswers &&
+                savedState.friendAnswers.length > 0 &&
+                savedState.friendQuestions &&
+                savedState.friendQuestions.length > 0) {
+
+                currentQuizData.fName = savedState.fName;
+                friendAnswers = savedState.friendAnswers;
+                friendQuestions = savedState.friendQuestions;
+                
+                if (friendAnswers.length >= friendQuestions.length) {
+                    return calculateAndShowResult();
+                }
+                
+                customAlert('تم منع الغش! 🚫😎 سيتم استئناف الاختبار من حيث توقفت.', 'warning');
+                return renderQuestion(friendAnswers.length);
             }
-            
-            customAlert('تم منع الغش! 🚫😎 سيتم استئناف الاختبار من حيث توقفت.', 'warning');
-            return renderQuestion(friendAnswers.length);
+        } catch(e) {
+            // Corrupted data - ignore and start fresh
+            localStorage.removeItem(quizKey);
         }
     }
 
@@ -472,8 +484,9 @@ window.startAnswering = function() {
         });
     }
 
-    // Save to local storage for Anti-Cheat
+    // Save to local storage for Anti-Cheat (include quizId to prevent collision)
     localStorage.setItem(quizKey, JSON.stringify({
+        quizId: quizKey,
         fName: fName,
         friendQuestions: friendQuestions,
         friendAnswers: friendAnswers
