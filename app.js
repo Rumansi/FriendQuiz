@@ -66,7 +66,7 @@ window.customAlert = function (msg, type = 'error') {
     setTimeout(() => {
         toast.classList.add('fade-out');
         setTimeout(() => toast.remove(), 300);
-    }, 4000);
+    }, 4000); // 4 seconds before fading out
 }
 
 const PREDEFINED_QUESTIONS = [
@@ -84,7 +84,7 @@ const PREDEFINED_QUESTIONS = [
     { id: 11, me: "أكثر شيء أحب قضاء وقتي فيه؟", friend: "أكثر شيء يحب {name} قضاء وقته فيه؟", o: ["😴 النوم", "📱 تصفح الجوال", "🎬 مشاهدة الأفلام/المسلسلات", "👯 الخروج مع الأصدقاء", "🎮 اللعب (Video Games)", "📚 القراءة"] },
     { id: 12, me: "كيف أتصرف عندما أحزن؟", friend: "كيف يتصرف {name} عندما يحزن؟", o: ["🛌 أنام", "🍔 آكل كثيراً", "🚶 أجلس بمفردي", "🫂 أفضفض لشخص قريب", "🎧 أستمع للموسيقى", "😭 أبكي"] },
     { id: 13, me: "حيواني الأليف المفضل؟", friend: "الحيوان الأليف المفضل لـ {name}؟", o: ["🐱 القطط", "🐶 الكلاب", "🦜 الطيور", "🐠 الأسماك", "🚫 لا أحب الحيوانات الأليفة"] },
-    { id: 14, me: "لو قدرت أسافر لأي دولة الآن، سأختار؟", friend: "لو استطاع {name} السفر لأي دولة الآن، سيختار؟", o: ["🏝️ المالديف", "🇹🇷 تركيا", "🇺🇸 أمريكا", "🇯🇵 اليابان", "🇫🇷 فرنسا", "🇬🇧 بريطانيا"] },
+    { id: 14, me: "لو قدرت أسافر لأي دولة الآن، سأختار؟", friend: "لو استطاع {name} السفر لأي دولة الآن، سيختار؟", o: ["🏝️ المالديف", "🇹🇷 تركيا", "🇺🇸 أمريكا", "🇯پان اليابان", "🇫🇷 فرنسا", "🇬🇧 بريطانيا"] },
     { id: 15, me: "كلمتي المفضلة التي أقولها دائماً؟", friend: "الكلمة التي يرددها {name} دائماً؟", o: ["💯 والله", "😲 بجد", "🤦 يا عم", "👌 تمام", "🚗 يا اسطى", "👍 أوكي"] },
     { id: 16, me: "لو كنت بطل خارق، ماذا ستكون قوتي؟", friend: "لو كان {name} بطلاً خارقاً، ما هي قوته؟", o: ["✈️ الطيران", "👻 الاختفاء", "💪 القوة الخارقة", "🧠 قراءة الأفكار", "⚡ السرعة الخارقة"] },
     { id: 17, me: "أفضل هدية ممكن حد يجيبهالي؟", friend: "أفضل هدية بالنسبة لـ {name}؟", o: ["📱 إلكترونيات", "👟 ملابس/أحذية", "⌚ ساعة قيمة", "🍫 شوكولاتة", "💵 كاش", "🌹 ورد"] },
@@ -99,8 +99,9 @@ function decodeData(str) {
     return JSON.parse(decodeURIComponent(escape(atob(str))));
 }
 
+// Router
 let currentQueryStr = "";
-let quizKey = "";
+let quizKey = ""; // Used for local storage & Firebase anti-cheat
 
 function initApp() {
     const params = new URLSearchParams(window.location.search);
@@ -108,24 +109,14 @@ function initApp() {
     const r = params.get('r');
 
     if (q) {
-        currentQueryStr = q;
-        db.ref(`quizzes_data/${q}`).once('value').then((snapshot) => {
-            const quizData = snapshot.val();
-            if (quizData) {
-                renderTakeQuiz(quizData);
-            } else {
-                try {
-                    const oldData = decodeData(q);
-                    renderTakeQuiz(oldData);
-                } catch (e) {
-                    customAlert('الرابط غير صالح أو تم حذفه!', 'error');
-                    renderHome();
-                }
-            }
-        }).catch(() => {
-            customAlert('حدث خطأ في جلب بيانات الاختبار!', 'error');
+        try {
+            currentQueryStr = q;
+            const quizData = decodeData(q);
+            renderTakeQuiz(quizData);
+        } catch (e) {
+            customAlert('الرابط غير صالح!', 'error');
             renderHome();
-        });
+        }
     } else if (r) {
         try {
             const resultData = decodeData(r);
@@ -209,6 +200,56 @@ window.clearMyQuiz = function () {
     localStorage.removeItem('friendQuiz_leaderboard');
     customAlert('تم حذف الاختبار والدرجات بنجاح!', 'success');
     renderHome();
+}
+
+// --- DASHBOARD ---
+window.renderDashboard = function () {
+    const savedQuiz = localStorage.getItem('friendQuiz_myLink');
+    let myQuizKey = "";
+    if (savedQuiz) {
+        const parsed = JSON.parse(savedQuiz);
+        myQuizKey = parsed.link.includes('?q=') ? parsed.link.split('?q=')[1] : '';
+    }
+
+    app.innerHTML = `
+        <div class="fade-in">
+            <h2 style="color: var(--secondary); margin-bottom: 20px;">🏆 لوحة درجات الأصدقاء</h2>
+            <div id="dashScoresContainer">
+                <p style="text-align:center; color:white;">جاري جلب الدرجات...</p>
+            </div>
+            <button class="btn btn-secondary" onclick="renderHome()">🏠 العودة للرئيسية</button>
+        </div>
+    `;
+
+    if (myQuizKey) {
+        listenToScoresFirebase(myQuizKey, (board) => {
+            const container = document.getElementById('dashScoresContainer');
+            if (!container) return;
+
+            if (board.length === 0) {
+                container.innerHTML = `
+                    <img src="https://media.tenor.com/pZ_sJd2gqPIAAAAi/sad-spongebob.gif" class="result-gif" alt="Sad GIF" style="border: 2px solid var(--card-border);">
+                    <p class="subtitle" style="color: white; font-weight: bold; font-size: 1.2rem; margin-top: 15px;">لم يقم أي من أصدقائك بحل الاختبار حتى الآن 🥺</p>
+                    <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">أنشئ اختباراً وشارك الرابط معهم لتظهر درجاتهم هنا!</p>
+                `;
+            } else {
+                board.sort((a, b) => (b.s / b.t) - (a.s / a.t));
+                let listHtml = board.map((item, i) => `
+                    <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-right: 4px solid ${i === 0 ? '#fbbf24' : 'var(--primary)'};">
+                        <span style="font-size:1.1rem; font-weight:bold;">${i === 0 ? '👑 ' : ''}${i + 1}. ${item.f}</span>
+                        <span style="font-weight:bold; color:var(--secondary); font-size:1.2rem;">${item.s} / ${item.t}</span>
+                    </div>
+                `).join('');
+
+                container.innerHTML = `
+                    <p class="subtitle">هذه هي درجات أصدقائك الذين حلوا اختبارك:</p>
+                    <div style="max-height: 350px; overflow-y: auto; margin-bottom: 20px; text-align: right; padding-right: 5px;">
+                        ${listHtml}
+                    </div>
+                `;
+            }
+        });
+    }
 }
 
 // --- CREATE PREDEFINED QUIZ ---
@@ -347,7 +388,7 @@ window.addCustomQuestion = function () {
     document.getElementById('customQuestionsContainer').insertAdjacentHTML('beforeend', generateCustomQuestionHTML(customQuestionsCounter));
 }
 
-// --- GENERATE SHORT LINK ---
+// --- GENERATE LINK ---
 window.generateQuizLink = function (type) {
     const creatorName = document.getElementById('creatorName').value.trim();
     if (!creatorName) {
@@ -369,6 +410,7 @@ window.generateQuizLink = function (type) {
             quizData.qs.push({ i: activeQuestions[i].id, a: parseInt(selected.value) });
         }
     } else {
+        // Custom
         for (let i = 1; i <= customQuestionsCounter; i++) {
             const qText = document.getElementById(`cust-q-${i}-text`)?.value.trim();
             if (!qText) continue;
@@ -378,49 +420,50 @@ window.generateQuizLink = function (type) {
             const opt2 = document.getElementById(`cust-q-${i}-opt-2`).value.trim();
 
             if (!opt0 || !opt1) {
-                customAlert(`السؤال رقم ${i} غير مكتمل!`, 'warning');
+                customAlert(`السؤال رقم ${i} غير مكتمل! تأكد من كتابة إجابة صحيحة وإجابة واحدة خاطئة على الأقل.`, 'warning');
                 return;
             }
 
             const options = [opt0, opt1];
             if (opt2) options.push(opt2);
 
-            quizData.qs.push({ q: qText, o: options, a: 0 });
+            quizData.qs.push({ q: qText, o: options, a: 0 }); // 0 is always the correct one in creation
         }
         if (quizData.qs.length === 0) return customAlert('يجب إضافة سؤال واحد على الأقل!', 'warning');
     }
 
-    // توليد ID قصير
-    const quizId = Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+    const encoded = encodeData(quizData);
+    const baseUrl = window.location.origin + window.location.pathname;
+    const shareLink = `${baseUrl}?q=${encoded}`;
 
-    db.ref(`quizzes_data/${quizId}`).set(quizData).then(() => {
-        const baseUrl = window.location.origin + window.location.pathname;
-        const shareLink = `${baseUrl}?q=${quizId}`;
+    // Save quiz persistently so user finds it when they return
+    localStorage.setItem('friendQuiz_myLink', JSON.stringify({ name: creatorName, link: shareLink }));
+    localStorage.removeItem('friendQuiz_leaderboard');
 
-        localStorage.setItem('friendQuiz_myLink', JSON.stringify({ name: creatorName, link: shareLink }));
-
-        app.innerHTML = `
-            <div class="fade-in">
-                <h2>تم إنشاء الاختبار بنجاح! 🎉</h2>
-                <p class="subtitle">انسخ الرابط القصير بالأسفل وأرسله لأصدقائك:</p>
-                <div class="link-box" id="shareLinkBox">${shareLink}</div>
-                <button class="btn" onclick="copyText('shareLinkBox')">📋 نسخ الرابط</button>
-                <button class="btn btn-secondary" onclick="renderHome()">🏠 الرئيسية</button>
-            </div>
-        `;
-    }).catch(() => {
-        customAlert('حدث خطأ أثناء حفظ الاختبار، يرجى المحاولة مرة أخرى.', 'error');
-    });
+    app.innerHTML = `
+        <div class="fade-in">
+            <h2>تم إنشاء الاختبار بنجاح! 🎉</h2>
+            <p class="subtitle">انسخ الرابط بالأسفل وأرسله لأصدقائك عبر الواتساب أو ماسنجر</p>
+            
+            <div class="link-box" id="shareLinkBox">${shareLink}</div>
+            
+            <button class="btn" onclick="copyText('shareLinkBox')">📋 نسخ الرابط</button>
+            <button class="btn btn-secondary" onclick="renderHome()">🏠 الرئيسية (الاختبار محفوظ)</button>
+        </div>
+    `;
 }
 
 window.copyText = function (elementId) {
     const text = document.getElementById(elementId).innerText;
     navigator.clipboard.writeText(text).then(() => {
-        customAlert('تم نسخ الرابط بنجاح!', 'success');
+        customAlert('تم نسخ الرابط بنجاح! أرسله الآن لأصدقائك.', 'success');
+    }).catch(err => {
+        customAlert('حدث خطأ أثناء النسخ التلقائي، يرجى تحديده ونسخه يدوياً.', 'error');
     });
 }
 
 // --- TAKE QUIZ FLOW ---
+let currentQuizData = null;
 let friendAnswers = [];
 let friendQuestions = [];
 
@@ -428,6 +471,7 @@ function renderTakeQuiz(quizData) {
     currentQuizData = quizData;
     quizKey = currentQueryStr;
 
+    // ANTI-CHEAT: Check if this exact quiz was started before
     const savedStateStr = localStorage.getItem(STORAGE_PREFIX + quizKey);
     if (savedStateStr) {
         try {
@@ -492,6 +536,7 @@ window.startAnswering = function () {
             return { text: q.friend.replace('{name}', currentQuizData.n), choices: choices };
         });
     } else {
+        // Custom
         friendQuestions = currentQuizData.qs.map(q => {
             let choices = q.o.map((opt, idx) => ({
                 text: opt,
@@ -568,6 +613,7 @@ function calculateAndShowResult() {
     const total = friendQuestions.length;
     const percentage = score / total;
 
+    // حفظ الدرجة في Firebase ليصل تنبيه فوري لصاحب الاختبار
     saveScoreToFirebase(quizKey, currentQuizData.fName, score, total);
 
     const resultData = {
